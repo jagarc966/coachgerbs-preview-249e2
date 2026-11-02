@@ -624,6 +624,7 @@ async function refreshRate(force=false){
     try { const r = await t(); money.rate=r; money.at=Date.now(); money.source='live'; saveRate(); renderMoney(); return; } catch(e){}
   }
   renderRate(true);
+  if (!money.rate) $('#mManual').click();      // no rate at all → open the manual box so it's obvious what to do
 }
 function fmtUSD(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function fmtJPY(n){ return Math.round(n).toLocaleString('en-US'); }
