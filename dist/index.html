@@ -145,6 +145,29 @@
   .hist .c{font-size:12px;color:var(--muted-2);margin-top:4px}
   .empty-state{text-align:center;color:var(--muted-2);padding:50px 20px;font-size:15px;line-height:1.5}
 
+  /* ---------- money ---------- */
+  .money-card{margin-bottom:0}
+  .money-in{display:flex;align-items:baseline;gap:8px}
+  .money-in .cur,.money-result .cur{font-size:26px;color:var(--muted);font-weight:600}
+  #mAmt{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--ink);font:inherit;font-size:40px;font-weight:600;padding:0;font-variant-numeric:tabular-nums}
+  #mAmt::placeholder{color:var(--muted-2)}
+  .money-swap-row{display:flex;justify-content:center;margin:-10px 0;position:relative;z-index:2}
+  .money-swap-row .swap{width:44px;height:44px;border-radius:50%;background:var(--red);display:grid;place-items:center;border:4px solid var(--bg);box-sizing:content-box;transition:transform .35s cubic-bezier(.3,1.6,.4,1)}
+  .money-swap-row .swap:active{transform:rotate(180deg) scale(.95)}
+  .money-swap-row .swap svg{width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+  .money-out{min-height:0;padding-top:22px}
+  .money-result{display:flex;align-items:baseline;gap:8px}
+  #mOut{font-size:44px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;word-break:break-all}
+  .money-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .money-grid button{background:var(--surface);border-radius:12px;padding:11px 12px;text-align:left;display:flex;justify-content:space-between;align-items:baseline;font-variant-numeric:tabular-nums}
+  .money-grid button:active{background:var(--surface-2)}
+  .money-grid .y{font-weight:600;font-size:15px}
+  .money-grid .d{color:var(--muted);font-size:14px}
+  .money-foot{font-size:12px;color:var(--muted-2);line-height:1.5;margin-top:14px}
+  .linkish{color:var(--red);font-size:12px;padding:0;text-decoration:underline;text-underline-offset:2px}
+  .rate-edit{display:flex;gap:8px;align-items:center;margin-top:10px}
+  .rate-edit input{flex:1;min-width:0;padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);font:inherit;font-size:16px;outline:0}
+
   /* ---------- install banner ---------- */
   #install{margin:0 0 12px;background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.5;display:none}
   #install b{color:var(--ink)}
@@ -165,6 +188,7 @@
 <nav class="tabs">
   <button class="active" data-view="translate">Translate</button>
   <button data-view="phrases">Phrases</button>
+  <button data-view="money">Money</button>
   <button data-view="history">History</button>
 </nav>
 
@@ -213,6 +237,25 @@
     <input class="search" id="phSearch" placeholder="Search phrases… (works offline)" autocomplete="off">
     <div class="cats" id="cats"></div>
     <div id="phList"></div>
+  </section>
+
+  <!-- ================= MONEY ================= -->
+  <section class="view" id="view-money">
+    <div class="card money-card">
+      <div class="label"><span id="mFromLabel">Japanese yen</span>
+        <span class="act"><button class="iconbtn" id="mClear" title="Clear"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
+      </div>
+      <div class="money-in"><span class="cur" id="mFromSym">¥</span><input id="mAmt" inputmode="decimal" placeholder="0" autocomplete="off"></div>
+    </div>
+    <div class="money-swap-row"><button class="swap" id="mSwap" aria-label="Swap currencies"><svg viewBox="0 0 24 24"><path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/></svg></button></div>
+    <div class="card out-card money-out">
+      <div class="label"><span id="mToLabel">US dollars</span></div>
+      <div class="money-result"><span class="cur" id="mToSym">$</span><span id="mOut">0.00</span></div>
+      <div class="status" id="mRate"></div>
+    </div>
+    <div class="section-title">Quick reference</div>
+    <div class="money-grid" id="mGrid"></div>
+    <div class="money-foot">Rate from the open market (mid-rate). ATMs and cards usually add 1–3%. <button class="linkish" id="mManual">Set rate manually</button></div>
   </section>
 
   <!-- ================= HISTORY ================= -->
@@ -549,8 +592,74 @@ function switchView(name){
   $('.dock').style.display = name==='translate' ? '' : 'none';
   if (name==='history') renderHistory();
   if (name==='phrases'){ renderCats(); renderPhrases(); }
+  if (name==='money'){ renderMoney(); refreshRate(); }
   $('main').scrollTop = 0;
 }
+
+/* ---------- money: JPY ⇄ USD ---------- */
+const money = {
+  dir: localStorage.getItem('nn.mdir') || 'jpy-usd',        // 'jpy-usd' | 'usd-jpy'
+  rate: null,          // JPY per 1 USD
+  at: 0,               // when the rate was fetched
+  source: '',          // 'live' | 'cached' | 'manual'
+};
+(function loadRate(){
+  try { const c = JSON.parse(localStorage.getItem('nn.rate')||'null'); if (c && c.rate>0){ money.rate=c.rate; money.at=c.at||0; money.source=c.source==='manual'?'manual':'cached'; } } catch(e){}
+})();
+function saveRate(){ try{ localStorage.setItem('nn.rate', JSON.stringify({rate:money.rate, at:money.at, source:money.source})); }catch(e){} }
+async function refreshRate(force=false){
+  if (money.source==='manual' && !force) { renderRate(); return; }
+  if (!force && money.rate && Date.now()-money.at < 30*60*1000) { renderRate(); return; }   // fresh enough (30 min)
+  if (!navigator.onLine) { renderRate(); return; }
+  const tries = [
+    async()=>{ const j=await fetchJSON('https://open.er-api.com/v6/latest/USD', 7000); const r=j?.rates?.JPY; if(r>0) return r; throw new Error('no JPY'); },
+    async()=>{ const j=await fetchJSON('https://api.frankfurter.app/latest?from=USD&to=JPY', 7000); const r=j?.rates?.JPY; if(r>0) return r; throw new Error('no JPY'); },
+  ];
+  for (const t of tries){
+    try { const r = await t(); money.rate=r; money.at=Date.now(); money.source='live'; saveRate(); renderMoney(); return; } catch(e){}
+  }
+  renderRate(true);
+}
+function fmtUSD(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtJPY(n){ return Math.round(n).toLocaleString('en-US'); }
+function parseAmt(){ const v=($('#mAmt').value||'').replace(/[^\d.]/g,''); const n=parseFloat(v); return isFinite(n)?n:0; }
+function renderRate(failed=false){
+  const el=$('#mRate'); if(!el) return;
+  if (!money.rate){ el.innerHTML = failed ? '<span class="err">Couldn\'t fetch a rate — tap "Set rate manually" below.</span>' : '<span>Fetching rate…</span>'; return; }
+  const age = money.at ? timeAgo(money.at) : '';
+  const tag = money.source==='manual' ? 'your rate' : money.source==='live' ? 'live' : 'last known';
+  const warn = (money.source!=='manual' && money.at && Date.now()-money.at > 24*3600*1000) ? ' <span class="err">· may be stale</span>' : '';
+  el.innerHTML = `$1 = ¥${money.rate.toFixed(2)} · ¥1,000 = $${fmtUSD(1000/money.rate)} <span style="opacity:.7">(${tag}${age?' · '+age:''})</span>${warn}`;
+}
+function renderMoney(){
+  const j2u = money.dir==='jpy-usd';
+  $('#mFromLabel').textContent = j2u ? 'Japanese yen' : 'US dollars';
+  $('#mToLabel').textContent   = j2u ? 'US dollars' : 'Japanese yen';
+  $('#mFromSym').textContent = j2u ? '¥' : '$';
+  $('#mToSym').textContent   = j2u ? '$' : '¥';
+  const a = parseAmt();
+  $('#mOut').textContent = !money.rate ? '—' : j2u ? fmtUSD(a/money.rate) : fmtJPY(a*money.rate);
+  renderRate();
+  const steps = j2u ? [100,500,1000,2000,5000,10000,20000,50000] : [1,5,10,20,50,100,200,500];
+  $('#mGrid').innerHTML = steps.map(s=>`<button data-v="${s}"><span class="y">${j2u?'¥':'$'}${s.toLocaleString('en-US')}</span><span class="d">${!money.rate?'—': j2u ? '$'+fmtUSD(s/money.rate) : '¥'+fmtJPY(s*money.rate)}</span></button>`).join('');
+  $('#mGrid').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('#mAmt').value=b.dataset.v; renderMoney(); });
+}
+$('#mAmt').addEventListener('input', ()=>{ const v=$('#mAmt').value; const c=v.replace(/[^\d.]/g,''); if(c!==v) $('#mAmt').value=c; renderMoney(); });
+$('#mClear').onclick = ()=>{ $('#mAmt').value=''; renderMoney(); $('#mAmt').focus(); };
+$('#mSwap').onclick = ()=>{
+  const out = $('#mOut').textContent.replace(/[^\d.]/g,'');
+  money.dir = money.dir==='jpy-usd' ? 'usd-jpy' : 'jpy-usd'; localStorage.setItem('nn.mdir', money.dir);
+  if (parseAmt()>0 && money.rate) $('#mAmt').value = money.dir==='jpy-usd' ? fmtJPY(parseFloat(out)) .replace(/,/g,'') : String(Math.round(parseFloat(out)*100)/100);
+  renderMoney();
+};
+$('#mManual').onclick = ()=>{
+  const foot=$('.money-foot'); if (foot.querySelector('.rate-edit')) return;
+  const box=document.createElement('div'); box.className='rate-edit';
+  box.innerHTML = `<span>$1 = ¥</span><input inputmode="decimal" id="mRateIn" placeholder="${money.rate?money.rate.toFixed(2):'150'}"><button class="btn primary" id="mRateSave" style="padding:9px 12px">Save</button><button class="btn ghost" id="mRateLive" style="padding:9px 12px">Use live</button>`;
+  foot.appendChild(box); $('#mRateIn').focus();
+  $('#mRateSave').onclick = ()=>{ const r=parseFloat($('#mRateIn').value); if(!(r>0)){ toast('Enter a number like 150'); return; } money.rate=r; money.at=Date.now(); money.source='manual'; saveRate(); box.remove(); renderMoney(); toast('Rate saved'); };
+  $('#mRateLive').onclick = ()=>{ money.source='cached'; money.at=0; box.remove(); refreshRate(true); toast('Fetching live rate'); };
+};
 function autosize(){ const t=$('#src'); t.style.height='auto'; t.style.height=Math.min(t.scrollHeight, window.innerHeight*.4)+'px'; }
 function swapDir(){
   state.dir = state.dir==='en-ja' ? 'ja-en' : 'en-ja'; localStorage.setItem('nn.dir', state.dir);

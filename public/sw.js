@@ -1,5 +1,5 @@
 // Nihongo Now service worker — caches the app shell so it opens instantly and works offline.
-const VERSION = 'nn-v2';
+const VERSION = 'nn-v3';
 const BASE = new URL('./', self.location).pathname;   // works at "/" or under a sub-path
 const SHELL = ['', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'].map(p => BASE + p);
 
